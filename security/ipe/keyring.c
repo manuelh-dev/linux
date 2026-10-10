@@ -26,5 +26,7 @@ int __init ipe_keyring_init(void)
 			      KEY_ALLOC_NOT_IN_QUOTA, NULL, NULL);
 	if (IS_ERR(ipe_keyring))
 		panic("failed to allocate \".ipe\" keyring");
+	key_register_ipe_keyring(ipe_keyring);
+
 	return 0;
 }

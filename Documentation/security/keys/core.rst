@@ -373,6 +373,18 @@ process making the call::
 	KEY_SPEC_REQKEY_AUTH_KEY	-7	assumed request_key()
 						  authorisation key
 
+There are also values that refer to a specific kernel keyring rather than to
+anything belonging to the caller.  These well-known IDs allow userspace to
+name kernel keyrings directly even when they are not linked into a process
+keyring::
+
+	CONSTANT			VALUE	KEY REFERENCED
+	==============================	======	===========================
+	KEY_SPEC_IPE_KEYRING		-12	the ".ipe" keyring
+
+The availability of a subsystem keyring depends on its kernel configuration.
+Looking up an unavailable keyring returns ``ENOKEY``.
+
 
 The main syscalls are:
 
