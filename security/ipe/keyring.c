@@ -74,6 +74,7 @@ int __init ipe_keyring_init(void)
 	}
 
 	ipe_keyring = keyring;
+	key_register_ipe_keyring(ipe_keyring);
 
 	return 0;
 }
