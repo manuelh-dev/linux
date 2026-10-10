@@ -22,6 +22,9 @@
 /* Session keyring create vs join semaphore */
 static DEFINE_MUTEX(key_session_mutex);
 
+/* IPE keyring reachable through KEY_SPEC_IPE_KEYRING */
+static struct key *ipe_keyring __ro_after_init;
+
 /* The root user's tracking struct */
 struct key_user root_key_user = {
 	.usage		= REFCOUNT_INIT(3),
@@ -590,6 +593,18 @@ bool lookup_user_key_possessed(const struct key *key,
 	return key == match_data->raw_data;
 }
 
+/**
+ * key_register_ipe_keyring - Publish the IPE keyring
+ * @keyring: The keyring to publish
+ *
+ * Make @keyring reachable by userspace through the KEY_SPEC_IPE_KEYRING
+ * special key ID. Called once, from an initcall, and never undone.
+ */
+void key_register_ipe_keyring(struct key *keyring)
+{
+	ipe_keyring = keyring;
+}
+
 /*
  * Look up a key ID given us by userspace with a given permissions mask to get
  * the key it refers to.
@@ -739,6 +754,14 @@ try_again:
 		if (!key)
 			goto error;
 		key_ref = make_key_ref(key, 1);
+		break;
+
+	case KEY_SPEC_IPE_KEYRING:
+		key = ipe_keyring;
+		if (!key)
+			goto error;
+		__key_get(key);
+		key_ref = make_key_ref(key, 0);
 		break;
 
 	default:
