@@ -248,11 +248,20 @@ policy updates have to be done rebootlessly.
 
 To allow an update from an external source, it could be potentially malicious,
 so this policy needs to have a way to be identified as trusted. This is
-done via a signature chained to a trust source in the kernel. Arbitrarily,
-this is  the ``SYSTEM_TRUSTED_KEYRING``, a keyring that is initially
-populated at kernel compile-time, as this matches the expectation that the
-author of the compiled-in policy described above is the same entity that can
-deploy policy updates.
+done via a signature chained to a trust source in the kernel. IPE can use the
+builtin trusted keyring and, when configured, the secondary and platform
+keyrings. This matches systems where the entity that establishes the kernel or
+firmware trust store is also authorized to deploy policy updates.
+
+When ``CONFIG_SECURITY_IPE_KEYRING`` is enabled, IPE also has a dedicated
+``.ipe`` keyring for deployments that establish an IPE-specific trust anchor
+from userspace. In this case, IPE uses it as a fallback after the configured
+system keyrings, but only when it is nonempty and has a reject-all
+restriction. This model makes the userspace component that provisions and
+restricts ``.ipe`` part of the trusted computing base, for instance a
+component running in early stages of the lifecycle of a system. The
+threat model and provisioning requirements are documented in
+:doc:`/admin-guide/LSM/ipe`.
 
 Anti-Rollback / Anti-Replay
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
