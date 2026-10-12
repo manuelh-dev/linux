@@ -9,6 +9,7 @@
 #include "ipe.h"
 #include "eval.h"
 #include "fs.h"
+#include "keyring.h"
 #include "policy.h"
 #include "policy_parser.h"
 #include "audit.h"
@@ -160,6 +161,7 @@ struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 				  const char *pkcs7, size_t pkcs7len)
 {
 	struct ipe_policy *new = NULL;
+	struct key *keyring;
 	int rc = 0;
 
 	new = kzalloc_obj(*new);
@@ -189,6 +191,14 @@ struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 						    VERIFYING_UNSPECIFIED_SIGNATURE,
 						    set_pkcs7_data, new);
 #endif
+		if (rc == -ENOKEY || rc == -EKEYREJECTED) {
+			keyring = ipe_keyring_lookup();
+			if (keyring)
+				rc = verify_pkcs7_signature(NULL, 0, new->pkcs7,
+							    pkcs7len, keyring,
+							    VERIFYING_UNSPECIFIED_SIGNATURE,
+							    set_pkcs7_data, new);
+		}
 		if (rc)
 			goto err;
 	} else {

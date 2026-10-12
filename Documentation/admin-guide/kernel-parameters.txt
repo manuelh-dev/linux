@@ -2733,6 +2733,15 @@ Kernel parameters
 			Determine whether IPE starts in permissive (0) or
 			enforce (1) mode. The default is enforce.
 
+	ipe.keyring_unsealed=
+			[IPE]
+			Format: <bool>
+			When set to 1, leave the IPE policy keyring
+			unsealed after initialization so userspace can provision
+			keys. Once the keyring is nonempty and restricted, it is
+			searched during policy-signature verification. The default
+			is 0, which creates the keyring restricted and empty.
+
 	ipe.success_audit=
 			[IPE]
 			Format: <bool>
