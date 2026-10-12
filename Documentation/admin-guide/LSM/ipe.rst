@@ -238,7 +238,11 @@ unconstrained root, and deploying an "allow all" policy). These
 policies must be signed by a certificate that chains to the
 ``SYSTEM_TRUSTED_KEYRING``, or to the secondary and/or platform keyrings if
 ``CONFIG_IPE_POLICY_SIG_SECONDARY_KEYRING`` and/or
-``CONFIG_IPE_POLICY_SIG_PLATFORM_KEYRING`` are enabled, respectively.
+``CONFIG_IPE_POLICY_SIG_PLATFORM_KEYRING`` are enabled, respectively. IPE also
+provides a dedicated ``.ipe`` keyring for policy-signing certificates that are
+provisioned by userspace, as described below. The ``.ipe`` keyring is an
+additive final fallback and does not replace the configured system trust
+sources.
 With openssl, the policy can be signed by::
 
    openssl smime -sign \
@@ -250,6 +254,41 @@ With openssl, the policy can be signed by::
       -nosmimecap \
       -outform der \
       -out "$MY_POLICY.p7b"
+
+Provisioning the IPE policy keyring
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``.ipe`` keyring allows a system to provision an IPE-specific policy
+signing certificate without embedding it in the kernel or firmware trust
+stores. It is not linked into any process keyring. Userspace addresses it
+directly with the ``KEY_SPEC_IPE_KEYRING`` special key ID (``-12``), which does
+not grant possession of the keyring.
+
+The keyring is restricted while empty by default and cannot then be
+provisioned. To provision it, boot with ``ipe.keyring_unsealed=1``. Userspace
+can add a DER-encoded X.509 certificate and then apply a reject-all
+restriction::
+
+   keyctl padd asymmetric "" -12 < policy-signing-key.der
+   keyctl restrict_keyring -12
+
+Both steps are required. IPE ignores the keyring until it is nonempty and
+restricted, so a partially provisioned, mutable keyring is not a trust source.
+The restriction cannot be removed. More than one certificate can be enrolled
+by repeating the ``keyctl padd`` command before restricting the keyring.
+
+Restriction prevents adding keys, but it does not prevent userspace from
+removing keys or otherwise disabling the keyring. To lock it against further
+userspace modification, drop its write and setattr permissions::
+
+   keyctl setperm -12 0x08030000
+
+This retains the permissions needed for verification and inspection.
+Provisioning, restriction, and permission hardening must be completed before
+relying on ``.ipe`` as a trust source.
+
+Once nonempty and restricted, ``.ipe`` is searched after the configured system
+trust sources. An absent, empty, or unrestricted ``.ipe`` keyring is ignored.
 
 Deploying the policies is done through securityfs, through the
 ``new_policy`` node. To deploy a policy, simply cat the file into the
