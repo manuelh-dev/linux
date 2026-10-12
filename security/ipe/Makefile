@@ -20,6 +20,7 @@ obj-$(CONFIG_SECURITY_IPE) += \
 	hooks.o \
 	fs.o \
 	ipe.o \
+	keyring.o \
 	policy.o \
 	policy_fs.o \
 	policy_parser.o \
