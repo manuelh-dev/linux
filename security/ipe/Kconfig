@@ -51,6 +51,22 @@ config IPE_POLICY_SIG_PLATFORM_KEYRING
 
 	  If unsure, answer Y.
 
+config SECURITY_IPE_KEYRING
+	bool "IPE policy keyring"
+	default n
+	help
+	  This option creates the .ipe keyring, which allows trusted
+	  userspace to provision certificates for IPE policy signature
+	  verification. IPE uses the keyring only after userspace has added
+	  at least one certificate and applied a reject-all restriction.
+
+	  Enable this only when the userspace component that provisions and
+	  restricts the keyring is part of the system's trusted computing
+	  base. Such systems must also prevent unauthorized kexec, which
+	  would start a new kernel without preserving the keyring state.
+
+	  If unsure, answer N.
+
 menu "IPE Trust Providers"
 
 config IPE_PROP_DM_VERITY

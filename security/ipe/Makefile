@@ -25,6 +25,8 @@ obj-$(CONFIG_SECURITY_IPE) += \
 	policy_parser.o \
 	audit.o \
 
+obj-$(CONFIG_SECURITY_IPE_KEYRING) += keyring.o
+
 clean-files := boot_policy.c \
 
 obj-$(CONFIG_SECURITY_IPE_KUNIT_TEST) += \

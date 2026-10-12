@@ -4,11 +4,13 @@
  */
 
 #include <linux/errno.h>
+#include <linux/key.h>
 #include <linux/verification.h>
 
 #include "ipe.h"
 #include "eval.h"
 #include "fs.h"
+#include "keyring.h"
 #include "policy.h"
 #include "policy_parser.h"
 #include "audit.h"
@@ -160,6 +162,9 @@ struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 				  const char *pkcs7, size_t pkcs7len)
 {
 	struct ipe_policy *new = NULL;
+#ifdef CONFIG_SECURITY_IPE_KEYRING
+	struct key_restriction *restriction;
+#endif
 	int rc = 0;
 
 	new = kzalloc_obj(*new);
@@ -188,6 +193,18 @@ struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 						    VERIFY_USE_PLATFORM_KEYRING,
 						    VERIFYING_UNSPECIFIED_SIGNATURE,
 						    set_pkcs7_data, new);
+#endif
+#ifdef CONFIG_SECURITY_IPE_KEYRING
+		if (rc == -ENOKEY || rc == -EKEYREJECTED) {
+			restriction = READ_ONCE(ipe_keyring->restrict_link);
+			if (READ_ONCE(ipe_keyring->keys.nr_leaves_on_tree) &&
+			    restriction &&
+			    READ_ONCE(restriction->check) == restrict_link_reject)
+				rc = verify_pkcs7_signature(NULL, 0, new->pkcs7,
+							    pkcs7len, ipe_keyring,
+							    VERIFYING_UNSPECIFIED_SIGNATURE,
+							    set_pkcs7_data, new);
+		}
 #endif
 		if (rc)
 			goto err;
