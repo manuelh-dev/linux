@@ -379,6 +379,23 @@ whether something maps to these operations, and under what conditions.
 Implementation Notes
 --------------------
 
+Control-plane authorization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+IPE securityfs changes are authorized by the policy that is active when the
+change is made. Authorization and mutation must be serialized so that another
+writer cannot replace the authorizing policy between those steps.
+
+The existing ``ipe_policy_lock`` mutex serializes control-plane writers. A
+writer acquires it before any per-policy inode lock, rechecks the relevant
+state, evaluates the control operation, and performs the mutation before
+releasing the locks. Policy parsing and signature verification happen before
+acquiring the mutex. RCU synchronization and freeing replaced policies happen
+after releasing it.
+
+Normal integrity evaluations continue to read the active policy through RCU
+and do not acquire the writer mutex.
+
 Anonymous Memory
 ~~~~~~~~~~~~~~~~
 
