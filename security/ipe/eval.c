@@ -367,6 +367,9 @@ int ipe_evaluate_event(const struct ipe_eval_ctx *const ctx)
 	} else if (rules->default_action != IPE_ACTION_INVALID) {
 		action = rules->default_action;
 		match_type = IPE_MATCH_TABLE;
+	} else if (ipe_is_control_op(ctx->op)) {
+		action = IPE_ACTION_ALLOW;
+		match_type = IPE_MATCH_CONTROL_DEFAULT;
 	} else {
 		action = pol->parsed->global_default_action;
 		match_type = IPE_MATCH_GLOBAL;
@@ -383,6 +386,27 @@ eval:
 		rc = 0;
 
 	return rc;
+}
+
+/**
+ * ipe_evaluate_control() - Evaluate an IPE securityfs control operation.
+ * @op: Supplies the control operation being attempted.
+ *
+ * Context: Requires ipe_policy_lock to be held across evaluation and the
+ * associated state change.
+ *
+ * Return:
+ * * %0         - Success
+ * * %-EACCES   - The active policy denied the operation
+ */
+int ipe_evaluate_control(enum ipe_op_type op)
+{
+	struct ipe_eval_ctx ctx = IPE_EVAL_CTX_INIT;
+
+	lockdep_assert_held(&ipe_policy_lock);
+	ipe_build_eval_ctx(&ctx, NULL, op, IPE_HOOK_SECURITYFS);
+
+	return ipe_evaluate_event(&ctx);
 }
 
 /* Set the right module name */

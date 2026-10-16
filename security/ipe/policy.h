@@ -17,6 +17,14 @@ enum ipe_op_type {
 	IPE_OP_KEXEC_INITRAMFS,
 	IPE_OP_POLICY,
 	IPE_OP_X509,
+	IPE_OP_IPE_CONTROL_POLICY_LOAD,
+	IPE_OP_IPE_CONTROL_POLICY_UPDATE,
+	IPE_OP_IPE_CONTROL_POLICY_ACTIVATION,
+	IPE_OP_IPE_CONTROL_POLICY_DELETE,
+	IPE_OP_IPE_CONTROL_ENFORCEMENT_ON,
+	IPE_OP_IPE_CONTROL_ENFORCEMENT_OFF,
+	IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_ON,
+	IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_OFF,
 	__IPE_OP_MAX,
 };
 
@@ -90,9 +98,15 @@ struct ipe_policy {
 struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 				  const char *pkcs7, size_t pkcs7len);
 void ipe_free_policy(struct ipe_policy *pol);
-int ipe_update_policy(struct inode *root, const char *text, size_t textlen,
-		      const char *pkcs7, size_t pkcs7len);
+int ipe_update_policy(struct inode *root, struct ipe_policy *new,
+		      struct ipe_policy **old);
 int ipe_set_active_pol(const struct ipe_policy *p);
 extern struct mutex ipe_policy_lock;
+
+static inline bool ipe_is_control_op(enum ipe_op_type op)
+{
+	return op >= IPE_OP_IPE_CONTROL_POLICY_LOAD &&
+	       op <= IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_OFF;
+}
 
 #endif /* _IPE_POLICY_H */

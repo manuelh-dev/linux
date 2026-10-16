@@ -204,6 +204,7 @@ out:
  * * %-EPERM			- Insufficient permission
  * * %-EINVAL			- Invalid input
  * * %-ENOENT			- Policy initializing/deleted
+ * * %-EACCES			- The active policy denied the activation
  */
 static ssize_t setactive(struct file *f, const char __user *data,
 			 size_t len, loff_t *offset)
@@ -224,6 +225,7 @@ static ssize_t setactive(struct file *f, const char __user *data,
 		return -EINVAL;
 
 	root = d_inode(f->f_path.dentry->d_parent);
+	mutex_lock(&ipe_policy_lock);
 	inode_lock(root);
 
 	p = (struct ipe_policy *)root->i_private;
@@ -236,6 +238,7 @@ static ssize_t setactive(struct file *f, const char __user *data,
 
 out:
 	inode_unlock(root);
+	mutex_unlock(&ipe_policy_lock);
 	return (rc < 0) ? rc : len;
 }
 
@@ -294,10 +297,13 @@ static ssize_t getactive(struct file *f, char __user *data,
  * * %-ENOENT				- Policy was deleted while updating
  * * %-EINVAL				- Policy name mismatch
  * * %-ESTALE				- Policy version too old
+ * * %-EACCES				- The active policy denied the update
  */
 static ssize_t update_policy(struct file *f, const char __user *data,
 			     size_t len, loff_t *offset)
 {
+	struct ipe_policy *new = NULL;
+	struct ipe_policy *old = NULL;
 	struct inode *root = NULL;
 	char *copy = NULL;
 	int rc = 0;
@@ -314,14 +320,30 @@ static ssize_t update_policy(struct file *f, const char __user *data,
 		goto out;
 	}
 
+	new = ipe_new_policy(NULL, 0, copy, len);
+	if (IS_ERR(new)) {
+		rc = PTR_ERR(new);
+		new = NULL;
+		goto out;
+	}
+
 	root = d_inode(f->f_path.dentry->d_parent);
+	mutex_lock(&ipe_policy_lock);
 	inode_lock(root);
-	rc = ipe_update_policy(root, NULL, 0, copy, len);
+	rc = ipe_update_policy(root, new, &old);
 	inode_unlock(root);
+	mutex_unlock(&ipe_policy_lock);
+
+	if (!rc) {
+		new = NULL;
+		synchronize_rcu();
+		ipe_free_policy(old);
+	}
 
 out:
 	kfree(copy);
 	if (rc) {
+		ipe_free_policy(new);
 		ipe_audit_policy_load(ERR_PTR(rc));
 		return rc;
 	}
@@ -343,6 +365,7 @@ out:
  * * %-EPERM			- Insufficient permission/deleting active policy
  * * %-EINVAL			- Invalid input
  * * %-ENOENT			- Policy initializing/deleted
+ * * %-EACCES			- The active policy denied the deletion
  */
 static ssize_t delete_policy(struct file *f, const char __user *data,
 			     size_t len, loff_t *offset)
@@ -364,25 +387,32 @@ static ssize_t delete_policy(struct file *f, const char __user *data,
 		return -EINVAL;
 
 	root = d_inode(f->f_path.dentry->d_parent);
+	mutex_lock(&ipe_policy_lock);
 	inode_lock(root);
 	p = (struct ipe_policy *)root->i_private;
 	if (!p) {
-		inode_unlock(root);
-		return -ENOENT;
+		rc = -ENOENT;
+		goto out_unlock;
 	}
 
-	mutex_lock(&ipe_policy_lock);
 	ap = rcu_dereference_protected(ipe_active_policy,
 				       lockdep_is_held(&ipe_policy_lock));
 	if (p == ap) {
-		mutex_unlock(&ipe_policy_lock);
-		inode_unlock(root);
-		return -EPERM;
+		rc = -EPERM;
+		goto out_unlock;
 	}
-	mutex_unlock(&ipe_policy_lock);
+
+	rc = ipe_evaluate_control(IPE_OP_IPE_CONTROL_POLICY_DELETE);
+	if (rc)
+		goto out_unlock;
 
 	root->i_private = NULL;
+
+out_unlock:
 	inode_unlock(root);
+	mutex_unlock(&ipe_policy_lock);
+	if (rc)
+		return rc;
 
 	synchronize_rcu();
 	ipe_free_policy(p);
