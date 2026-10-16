@@ -41,6 +41,22 @@ static const char *const audit_op_names[__IPE_OP_MAX + 1] = {
 	[IPE_OP_KEXEC_INITRAMFS]	= "KEXEC_INITRAMFS",
 	[IPE_OP_POLICY]			= "POLICY",
 	[IPE_OP_X509]			= "X509_CERT",
+	[IPE_OP_IPE_CONTROL_POLICY_LOAD] =
+		"IPE_CONTROL_POLICY_LOAD",
+	[IPE_OP_IPE_CONTROL_POLICY_UPDATE] =
+		"IPE_CONTROL_POLICY_UPDATE",
+	[IPE_OP_IPE_CONTROL_POLICY_ACTIVATION] =
+		"IPE_CONTROL_POLICY_ACTIVATION",
+	[IPE_OP_IPE_CONTROL_POLICY_DELETE] =
+		"IPE_CONTROL_POLICY_DELETE",
+	[IPE_OP_IPE_CONTROL_ENFORCEMENT_ON] =
+		"IPE_CONTROL_ENFORCEMENT_ON",
+	[IPE_OP_IPE_CONTROL_ENFORCEMENT_OFF] =
+		"IPE_CONTROL_ENFORCEMENT_OFF",
+	[IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_ON] =
+		"IPE_CONTROL_SUCCESS_AUDIT_ON",
+	[IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_OFF] =
+		"IPE_CONTROL_SUCCESS_AUDIT_OFF",
 	[IPE_OP_INVALID]		= "UNKNOWN",
 };
 
@@ -51,6 +67,7 @@ static const char *const audit_hook_names[__IPE_HOOK_MAX] = {
 	[IPE_HOOK_MPROTECT]		= "MPROTECT",
 	[IPE_HOOK_KERNEL_READ]		= "KERNEL_READ",
 	[IPE_HOOK_KERNEL_LOAD]		= "KERNEL_LOAD",
+	[IPE_HOOK_SECURITYFS]		= "SECURITYFS",
 };
 
 static const char *const audit_prop_names[__IPE_PROP_MAX] = {
@@ -120,8 +137,8 @@ static void audit_rule(struct audit_buffer *ab, const struct ipe_rule *r)
  * ipe_audit_match() - Audit a rule match in a policy evaluation.
  * @ctx: Supplies a pointer to the evaluation context that was used in the
  *	 evaluation.
- * @match_type: Supplies the scope of the match: rule, operation default,
- *		global default.
+ * @match_type: Supplies the source of the decision: rule, operation default,
+ *		global default, or control-operation default.
  * @act: Supplies the IPE's evaluation decision, deny or allow.
  * @r: Supplies a pointer to the rule that was matched, if possible.
  */
@@ -166,8 +183,11 @@ void ipe_audit_match(const struct ipe_eval_ctx *const ctx,
 	else if (match_type == IPE_MATCH_TABLE)
 		audit_log_format(ab, " rule=\"DEFAULT op=%s action=%s\"", op,
 				 ACTSTR(act));
-	else
+	else if (match_type == IPE_MATCH_GLOBAL)
 		audit_log_format(ab, " rule=\"DEFAULT action=%s\"",
+				 ACTSTR(act));
+	else if (match_type == IPE_MATCH_CONTROL_DEFAULT)
+		audit_log_format(ab, " rule=\"CONTROL_DEFAULT op=%s action=%s\"", op,
 				 ACTSTR(act));
 
 	audit_log_end(ab);

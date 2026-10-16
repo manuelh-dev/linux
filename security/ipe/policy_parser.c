@@ -239,6 +239,17 @@ static const match_table_t operation_tokens = {
 	{IPE_OP_KEXEC_INITRAMFS,	"op=KEXEC_INITRAMFS"},
 	{IPE_OP_POLICY,			"op=POLICY"},
 	{IPE_OP_X509,			"op=X509_CERT"},
+	{IPE_OP_IPE_CONTROL_POLICY_LOAD,	"op=IPE_CONTROL_POLICY_LOAD"},
+	{IPE_OP_IPE_CONTROL_POLICY_UPDATE,	"op=IPE_CONTROL_POLICY_UPDATE"},
+	{IPE_OP_IPE_CONTROL_POLICY_ACTIVATION,
+					"op=IPE_CONTROL_POLICY_ACTIVATION"},
+	{IPE_OP_IPE_CONTROL_POLICY_DELETE,	"op=IPE_CONTROL_POLICY_DELETE"},
+	{IPE_OP_IPE_CONTROL_ENFORCEMENT_ON,	"op=IPE_CONTROL_ENFORCEMENT_ON"},
+	{IPE_OP_IPE_CONTROL_ENFORCEMENT_OFF,	"op=IPE_CONTROL_ENFORCEMENT_OFF"},
+	{IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_ON,
+					"op=IPE_CONTROL_SUCCESS_AUDIT_ON"},
+	{IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_OFF,
+					"op=IPE_CONTROL_SUCCESS_AUDIT_OFF"},
 	{IPE_OP_INVALID,		NULL}
 };
 
@@ -400,6 +411,8 @@ static int parse_rule(char *line, struct ipe_parsed_policy *p)
 					rc = -EBADMSG;
 				else
 					op_parsed = true;
+			} else if (ipe_is_control_op(op)) {
+				rc = -EBADMSG;
 			} else {
 				rc = parse_property(t, r);
 			}
@@ -491,6 +504,9 @@ static int validate_policy(const struct ipe_parsed_policy *p)
 		return 0;
 
 	for (i = 0; i < ARRAY_SIZE(p->rules); ++i) {
+		if (ipe_is_control_op(i))
+			continue;
+
 		if (p->rules[i].default_action == IPE_ACTION_INVALID)
 			return -EBADMSG;
 	}

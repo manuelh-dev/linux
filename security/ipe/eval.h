@@ -58,6 +58,7 @@ enum ipe_match {
 	IPE_MATCH_RULE = 0,
 	IPE_MATCH_TABLE,
 	IPE_MATCH_GLOBAL,
+	IPE_MATCH_CONTROL_DEFAULT,
 	__IPE_MATCH_MAX
 };
 
@@ -66,5 +67,6 @@ void ipe_build_eval_ctx(struct ipe_eval_ctx *ctx,
 			enum ipe_op_type op,
 			enum ipe_hook_type hook);
 int ipe_evaluate_event(const struct ipe_eval_ctx *const ctx);
+int ipe_evaluate_control(enum ipe_op_type op);
 
 #endif /* _IPE_EVAL_H */

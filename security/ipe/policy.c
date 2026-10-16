@@ -13,7 +13,7 @@
 #include "policy_parser.h"
 #include "audit.h"
 
-/* lock for synchronizing writers across ipe policy */
+/* Serializes writers across the IPE control plane. */
 DEFINE_MUTEX(ipe_policy_lock);
 
 /**
@@ -73,68 +73,56 @@ static int set_pkcs7_data(void *ctx, const void *data, size_t len,
 }
 
 /**
- * ipe_update_policy() - parse a new policy and replace old with it.
+ * ipe_update_policy() - Replace a policy with a parsed update.
  * @root: Supplies a pointer to the securityfs inode saved the policy.
- * @text: Supplies a pointer to the plain text policy.
- * @textlen: Supplies the length of @text.
- * @pkcs7: Supplies a pointer to a buffer containing a pkcs7 message.
- * @pkcs7len: Supplies the length of @pkcs7len.
+ * @new: Supplies the parsed policy to install.
+ * @oldp: Returns the replaced policy on success.
  *
- * @text/@textlen is mutually exclusive with @pkcs7/@pkcs7len - see
- * ipe_new_policy.
- *
- * Context: Requires root->i_rwsem to be held.
+ * Context: Requires ipe_policy_lock and root->i_rwsem to be held.
  * Return:
  * * %0	- Success
  * * %-ENOENT	- Policy was deleted while updating
  * * %-EINVAL	- Policy name mismatch
  * * %-ESTALE	- Policy version too old
+ * * %-EACCES	- The active policy denied the update
  */
-int ipe_update_policy(struct inode *root, const char *text, size_t textlen,
-		      const char *pkcs7, size_t pkcs7len)
+int ipe_update_policy(struct inode *root, struct ipe_policy *new,
+		      struct ipe_policy **oldp)
 {
-	struct ipe_policy *old, *ap, *new = NULL;
+	struct ipe_policy *old, *ap;
 	int rc = 0;
+
+	lockdep_assert_held(&ipe_policy_lock);
+	lockdep_assert_held_write(&root->i_rwsem);
 
 	old = (struct ipe_policy *)root->i_private;
 	if (!old)
 		return -ENOENT;
 
-	new = ipe_new_policy(text, textlen, pkcs7, pkcs7len);
-	if (IS_ERR(new))
-		return PTR_ERR(new);
+	if (strcmp(new->parsed->name, old->parsed->name))
+		return -EINVAL;
 
-	if (strcmp(new->parsed->name, old->parsed->name)) {
-		rc = -EINVAL;
-		goto err;
-	}
+	if (ver_to_u64(old) >= ver_to_u64(new))
+		return -ESTALE;
 
-	if (ver_to_u64(old) >= ver_to_u64(new)) {
-		rc = -ESTALE;
-		goto err;
-	}
+	rc = ipe_evaluate_control(IPE_OP_IPE_CONTROL_POLICY_UPDATE);
+	if (rc)
+		return rc;
+
+	ap = rcu_dereference_protected(ipe_active_policy,
+				       lockdep_is_held(&ipe_policy_lock));
 
 	root->i_private = new;
 	swap(new->policyfs, old->policyfs);
 	ipe_audit_policy_load(new);
 
-	mutex_lock(&ipe_policy_lock);
-	ap = rcu_dereference_protected(ipe_active_policy,
-				       lockdep_is_held(&ipe_policy_lock));
 	if (old == ap) {
 		rcu_assign_pointer(ipe_active_policy, new);
-		mutex_unlock(&ipe_policy_lock);
 		ipe_audit_policy_activation(old, new);
-	} else {
-		mutex_unlock(&ipe_policy_lock);
 	}
-	synchronize_rcu();
-	ipe_free_policy(old);
+	*oldp = old;
 
 	return 0;
-err:
-	ipe_free_policy(new);
-	return rc;
 }
 
 /**
@@ -214,31 +202,34 @@ err:
  * ipe_set_active_pol() - Make @p the active policy.
  * @p: Supplies a pointer to the policy to make active.
  *
- * Context: Requires root->i_rwsem, which i_private has the policy, to be held.
+ * Context: Requires ipe_policy_lock and root->i_rwsem, which i_private has
+ * the policy, to be held.
  * Return:
  * * %0	- Success
  * * %-EINVAL	- New active policy version is invalid
+ * * %-EACCES	- The active policy denied the activation
  */
 int ipe_set_active_pol(const struct ipe_policy *p)
 {
 	struct ipe_policy *ap = NULL;
+	int rc;
 
-	mutex_lock(&ipe_policy_lock);
+	lockdep_assert_held(&ipe_policy_lock);
 
 	ap = rcu_dereference_protected(ipe_active_policy,
 				       lockdep_is_held(&ipe_policy_lock));
-	if (ap == p) {
-		mutex_unlock(&ipe_policy_lock);
+	if (ap == p)
 		return 0;
-	}
-	if (ap && ver_to_u64(ap) > ver_to_u64(p)) {
-		mutex_unlock(&ipe_policy_lock);
+
+	if (ap && ver_to_u64(ap) > ver_to_u64(p))
 		return -EINVAL;
-	}
+
+	rc = ipe_evaluate_control(IPE_OP_IPE_CONTROL_POLICY_ACTIVATION);
+	if (rc)
+		return rc;
 
 	rcu_assign_pointer(ipe_active_policy, p);
 	ipe_audit_policy_activation(ap, p);
-	mutex_unlock(&ipe_policy_lock);
 
 	return 0;
 }

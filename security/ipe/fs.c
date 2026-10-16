@@ -25,21 +25,33 @@ struct dentry *policy_root __ro_after_init;
  * Return:
  * * Length of buffer written	- Success
  * * %-EPERM			- Insufficient permission
+ * * %-EACCES			- The active policy denied the change
  */
 static ssize_t setaudit(struct file *f, const char __user *data,
 			size_t len, loff_t *offset)
 {
 	int rc = 0;
-	bool value;
+	bool new_value, old_value;
 
 	if (!file_ns_capable(f, &init_user_ns, CAP_MAC_ADMIN))
 		return -EPERM;
 
-	rc = kstrtobool_from_user(data, len, &value);
+	rc = kstrtobool_from_user(data, len, &new_value);
 	if (rc)
 		return rc;
 
-	WRITE_ONCE(success_audit, value);
+	mutex_lock(&ipe_policy_lock);
+	old_value = READ_ONCE(success_audit);
+	if (new_value != old_value) {
+		rc = ipe_evaluate_control(new_value ?
+					 IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_ON :
+					 IPE_OP_IPE_CONTROL_SUCCESS_AUDIT_OFF);
+		if (!rc)
+			WRITE_ONCE(success_audit, new_value);
+	}
+	mutex_unlock(&ipe_policy_lock);
+	if (rc)
+		return rc;
 
 	return len;
 }
@@ -73,6 +85,7 @@ static ssize_t getaudit(struct file *f, char __user *data,
  * Return:
  * * Length of buffer written	- Success
  * * %-EPERM			- Insufficient permission
+ * * %-EACCES			- The active policy denied the change
  */
 static ssize_t setenforce(struct file *f, const char __user *data,
 			  size_t len, loff_t *offset)
@@ -83,15 +96,24 @@ static ssize_t setenforce(struct file *f, const char __user *data,
 	if (!file_ns_capable(f, &init_user_ns, CAP_MAC_ADMIN))
 		return -EPERM;
 
-	old_value = READ_ONCE(enforce);
 	rc = kstrtobool_from_user(data, len, &new_value);
 	if (rc)
 		return rc;
 
+	mutex_lock(&ipe_policy_lock);
+	old_value = READ_ONCE(enforce);
 	if (new_value != old_value) {
-		ipe_audit_enforce(new_value, old_value);
-		WRITE_ONCE(enforce, new_value);
+		rc = ipe_evaluate_control(new_value ?
+					 IPE_OP_IPE_CONTROL_ENFORCEMENT_ON :
+					 IPE_OP_IPE_CONTROL_ENFORCEMENT_OFF);
+		if (!rc) {
+			ipe_audit_enforce(new_value, old_value);
+			WRITE_ONCE(enforce, new_value);
+		}
 	}
+	mutex_unlock(&ipe_policy_lock);
+	if (rc)
+		return rc;
 
 	return len;
 }
@@ -132,6 +154,7 @@ static ssize_t getenforce(struct file *f, char __user *data,
  * * %-EEXIST			- Same name policy already deployed
  * * %-ENOKEY			- Policy signing key not found
  * * %-EKEYREJECTED		- Policy signature verification failed
+ * * %-EACCES			- The active policy denied the load
  */
 static ssize_t new_policy(struct file *f, const char __user *data,
 			  size_t len, loff_t *offset)
@@ -158,7 +181,11 @@ static ssize_t new_policy(struct file *f, const char __user *data,
 		goto out;
 	}
 
-	rc = ipe_new_policyfs_node(p);
+	mutex_lock(&ipe_policy_lock);
+	rc = ipe_evaluate_control(IPE_OP_IPE_CONTROL_POLICY_LOAD);
+	if (!rc)
+		rc = ipe_new_policyfs_node(p);
+	mutex_unlock(&ipe_policy_lock);
 
 out:
 	kfree(copy);
