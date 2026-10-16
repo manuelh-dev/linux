@@ -59,6 +59,7 @@ TARGETS += hid
 TARGETS += intel_pstate
 TARGETS += iommu
 TARGETS += ipc
+TARGETS += ipe
 TARGETS += ir
 TARGETS += kcmp
 TARGETS += kexec

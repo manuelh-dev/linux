@@ -227,6 +227,47 @@ static const struct policy_case policy_cases[] = {
 		"op=EXECUTE fsverity_digest=1c0d7ee1f8343b7fbe418378e8eb22c061d7dec7 action=DENY\n",
 		-EBADMSG,
 		"old-style digest"
+	},
+	{
+		"policy_name=control_operations policy_version=0.0.0\n"
+		"DEFAULT action=ALLOW\n"
+		"op=IPE_CONTROL_POLICY_LOAD action=DENY\n"
+		"op=IPE_CONTROL_POLICY_UPDATE action=DENY\n"
+		"op=IPE_CONTROL_POLICY_ACTIVATION action=DENY\n"
+		"op=IPE_CONTROL_POLICY_DELETE action=DENY\n"
+		"op=IPE_CONTROL_ENFORCEMENT_ON action=DENY\n"
+		"op=IPE_CONTROL_ENFORCEMENT_OFF action=DENY\n"
+		"op=IPE_CONTROL_SUCCESS_AUDIT_ON action=DENY\n"
+		"op=IPE_CONTROL_SUCCESS_AUDIT_OFF action=DENY\n",
+		0,
+		"control operations",
+	},
+	{
+		"policy_name=control_defaults policy_version=0.0.0\n"
+		"DEFAULT action=ALLOW\n"
+		"DEFAULT op=IPE_CONTROL_POLICY_LOAD action=DENY\n"
+		"DEFAULT op=IPE_CONTROL_POLICY_UPDATE action=DENY\n",
+		0,
+		"control operation defaults",
+	},
+	{
+		"policy_name=control_property policy_version=0.0.0\n"
+		"DEFAULT action=ALLOW\n"
+		"op=IPE_CONTROL_POLICY_LOAD boot_verified=TRUE action=DENY\n",
+		-EBADMSG,
+		"property on control operation",
+	},
+	{
+		"policy_name=file_defaults policy_version=0.0.0\n"
+		"DEFAULT op=EXECUTE action=ALLOW\n"
+		"DEFAULT op=FIRMWARE action=ALLOW\n"
+		"DEFAULT op=KMODULE action=ALLOW\n"
+		"DEFAULT op=KEXEC_IMAGE action=ALLOW\n"
+		"DEFAULT op=KEXEC_INITRAMFS action=ALLOW\n"
+		"DEFAULT op=POLICY action=ALLOW\n"
+		"DEFAULT op=X509_CERT action=ALLOW\n",
+		0,
+		"control operations need no defaults",
 	}
 };
 
