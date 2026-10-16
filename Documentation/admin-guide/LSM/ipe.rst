@@ -201,10 +201,65 @@ or a per-operation level::
    # Operation Specific
    DEFAULT op=EXECUTE action=ALLOW
 
-A default must be set for all known operations in IPE. If you want to
-preserve older policies being compatible with newer kernels that can introduce
-new operations, set a global default of ``ALLOW``, then override the
-defaults on a per-operation basis (as above).
+A default must be set for all file operations in IPE. If you want to preserve
+older policies being compatible with newer kernels that can introduce new file
+operations, set a global default of ``ALLOW``, then override the defaults on a
+per-operation basis (as above). Control-plane operations are the exception
+described below.
+
+Control-plane operations
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The active IPE policy can authorize changes made through IPE's securityfs
+interface. The control-plane operations and their corresponding changes are:
+
+``IPE_CONTROL_POLICY_LOAD``
+  Load a policy through ``new_policy``.
+``IPE_CONTROL_POLICY_UPDATE``
+  Update a loaded policy through its ``update`` file.
+``IPE_CONTROL_POLICY_ACTIVATION``
+  Make a loaded policy active through its ``active`` file.
+``IPE_CONTROL_POLICY_DELETE``
+  Delete a loaded policy through its ``delete`` file.
+``IPE_CONTROL_ENFORCEMENT_ON`` and ``IPE_CONTROL_ENFORCEMENT_OFF``
+  Enable or disable enforcement through ``enforce``.
+``IPE_CONTROL_SUCCESS_AUDIT_ON`` and ``IPE_CONTROL_SUCCESS_AUDIT_OFF``
+  Enable or disable successful decision auditing through ``success_audit``.
+
+Control-plane rules do not accept additional properties. For example::
+
+   op=IPE_CONTROL_POLICY_UPDATE action=DENY
+
+If no policy is active, control-plane changes retain their existing behavior.
+For compatibility with policies written before these operations existed, an
+active policy also allows any control-plane operation that it does not mention.
+This ``CONTROL_DEFAULT`` allowance takes precedence over a global
+``DEFAULT action=DENY``. A policy must therefore name each control-plane
+operation that it intends to deny.
+
+Authorization is performed in addition to the existing capability, signature,
+version, and input checks. Activating the already-active policy or writing the
+current value to a boolean control remains a no-op and is not evaluated. In
+permissive mode, denials are audited but do not prevent the requested change.
+
+With enforcement enabled, denying ``IPE_CONTROL_POLICY_UPDATE``,
+``IPE_CONTROL_POLICY_ACTIVATION``, and ``IPE_CONTROL_ENFORCEMENT_OFF`` keeps
+the active policy unchanged and enforcement enabled. Deleting the active
+policy is already prohibited. Other changes, such as loading inactive
+policies or changing success auditing, can remain permitted.
+
+To also prevent changes to the other controls, the following rules freeze
+all IPE securityfs state while the policy is active and enforcement is
+enabled::
+
+   op=IPE_CONTROL_POLICY_LOAD action=DENY
+   op=IPE_CONTROL_POLICY_UPDATE action=DENY
+   op=IPE_CONTROL_POLICY_ACTIVATION action=DENY
+   op=IPE_CONTROL_POLICY_DELETE action=DENY
+   op=IPE_CONTROL_ENFORCEMENT_ON action=DENY
+   op=IPE_CONTROL_ENFORCEMENT_OFF action=DENY
+   op=IPE_CONTROL_SUCCESS_AUDIT_ON action=DENY
+   op=IPE_CONTROL_SUCCESS_AUDIT_OFF action=DENY
 
 With configurable policy-based LSMs, there's several issues with
 enforcing the configurable policies at startup, around reading and
@@ -256,6 +311,10 @@ Deploying the policies is done through securityfs, through the
 securityfs node::
 
    cat "$MY_POLICY.p7b" > /sys/kernel/security/ipe/new_policy
+
+When a policy is active, it authorizes this load and the update, activation,
+and deletion operations described below. The active policy also authorizes
+changes to the top-level ``enforce`` and ``success_audit`` files.
 
 Upon success, this will create one subdirectory under
 ``/sys/kernel/security/ipe/policies/``. The subdirectory will be the
@@ -355,9 +414,18 @@ Event Examples::
    type=1300 audit(1653364735.161:64): SYSCALL arch=c000003e syscall=9 success=no exit=-13 a0=0 a1=1000 a2=4 a3=21 items=0 ppid=2219 pid=2472 auid=0 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts0 ses=2 comm="mmap_test" exe="/root/overlake_test/upstream_test/vol_fsverity/bin/mmap_test" subj=unconfined key=(null)
    type=1327 audit(1653364735.161:64): 707974686F6E3300746573742F6D61696E2E7079002D6E00
 
+Control-plane denials use the same record type, for example::
+
+   type=1420 audit(1653364800.100:65): ipe_op=IPE_CONTROL_POLICY_UPDATE ipe_hook=SECURITYFS enforcing=1 pid=2500 comm="cat" path=? dev=? ino=? rule="op=IPE_CONTROL_POLICY_UPDATE action=DENY"
+
 This event indicates that IPE made an access control decision; the IPE
 specific record (1420) is always emitted in conjunction with a
 ``AUDITSYSCALL`` record.
+
+Control-plane evaluations use ``ipe_hook=SECURITYFS``. When a policy does not
+mention the operation, successful-decision auditing reports the compatibility
+allowance as, for example,
+``rule="CONTROL_DEFAULT op=IPE_CONTROL_POLICY_UPDATE action=ALLOW"``.
 
 Determining whether IPE is in permissive or enforced mode can be derived
 from ``success`` property and exit code of the ``AUDITSYSCALL`` record.
@@ -370,7 +438,7 @@ Field descriptions:
 +===========+============+===========+=================================================================================+
 | ipe_op    | string     | No        | The IPE operation name associated with the log                                  |
 +-----------+------------+-----------+---------------------------------------------------------------------------------+
-| ipe_hook  | string     | No        | The name of the LSM hook that triggered the IPE event                           |
+| ipe_hook  | string     | No        | The hook or interface that triggered the IPE event                              |
 +-----------+------------+-----------+---------------------------------------------------------------------------------+
 | enforcing | integer    | No        | The current IPE enforcing state 1 is in enforcing mode, 0 is in permissive mode |
 +-----------+------------+-----------+---------------------------------------------------------------------------------+
